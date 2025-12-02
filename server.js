@@ -15,7 +15,7 @@ let newsCache = [];
 let lastFetchTime = 0;
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-// Fetch UK sports news using /everything endpoint (works with free tier)
+// Fetch UK sports news - TIGHTER FILTERING
 async function fetchUKSportsNews() {
   try {
     if (!process.env.NEWS_API_KEY) {
@@ -24,30 +24,57 @@ async function fetchUKSportsNews() {
 
     const response = await axios.get('https://newsapi.org/v2/everything', {
       params: {
-        q: '(football OR "premier league" OR rugby OR cricket OR "formula 1" OR tennis) AND (UK OR England OR Scotland OR Wales OR Britain)',
+        q: '("premier league" OR "champions league" OR "FA cup" OR rugby OR cricket OR "six nations" OR tennis OR "formula 1") AND (England OR Scotland OR Wales OR UK OR Britain)',
         language: 'en',
         sortBy: 'publishedAt',
-        pageSize: 50,
+        pageSize: 100,
         apiKey: process.env.NEWS_API_KEY
       },
       timeout: 10000
     });
 
-    return response.data.articles.map(article => ({
-      title: article.title,
-      description: article.description,
-      url: article.url,
-      image: article.urlToImage || 'https://via.placeholder.com/400x200?text=Sports+News',
-      publishedAt: new Date(article.publishedAt).toLocaleString(),
-      source: article.source.name
-    }));
+    return response.data.articles
+      .filter(article => {
+        // STRICT FILTERING - Remove movie/entertainment content
+        const content = `${article.title || ''} ${article.description || ''}`.toLowerCase();
+        
+        // Exclude entertainment/movie terms
+        const excludeTerms = [
+          'movie', 'film', 'cinema', 'box office', 'trailer', 'premiere',
+          'actor', 'actress', 'hollywood', 'netflix', 'streaming',
+          'tv show', 'series', 'episode', 'season finale', 'director',
+          'oscar', 'grammy', 'emmy', 'celebrity', 'red carpet'
+        ];
+        
+        if (excludeTerms.some(term => content.includes(term))) {
+          return false;
+        }
+        
+        // Must have sport indicators
+        const sportTerms = [
+          'football', 'soccer', 'rugby', 'cricket', 'tennis', 'f1', 'formula',
+          'match', 'game', 'tournament', 'league', 'championship', 'cup',
+          'goal', 'score', 'win', 'defeat', 'draw', 'team', 'player',
+          'manager', 'coach', 'transfer', 'fixture', 'stadium'
+        ];
+        
+        return sportTerms.some(term => content.includes(term));
+      })
+      .map(article => ({
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        image: article.urlToImage || 'https://via.placeholder.com/400x200?text=Sports+News',
+        publishedAt: new Date(article.publishedAt).toLocaleString(),
+        source: article.source.name
+      }));
   } catch (error) {
     console.log('NewsAPI failed:', error.message);
     return [];
   }
 }
 
-// Fetch from BBC Sport specifically (alternative approach)
+// Fetch from BBC Sport specifically
 async function fetchBBCSports() {
   try {
     if (!process.env.NEWS_API_KEY) {
@@ -56,8 +83,58 @@ async function fetchBBCSports() {
 
     const response = await axios.get('https://newsapi.org/v2/everything', {
       params: {
-        domains: 'bbc.co.uk,bbc.com',
-        q: 'sport OR football OR rugby OR cricket',
+        domains: 'bbc.co.uk',
+        q: '(football OR rugby OR cricket OR tennis OR athletics OR golf) AND sport',
+        language: 'en',
+        sortBy: 'publishedAt',
+        pageSize: 50,
+        apiKey: process.env.NEWS_API_KEY
+      },
+      timeout: 10000
+    });
+
+    return response.data.articles
+      .filter(article => {
+        const content = `${article.title || ''} ${article.description || ''}`.toLowerCase();
+        
+        // BBC Sport specific - exclude entertainment
+        const excludeTerms = ['movie', 'film', 'tv show', 'actor', 'actress'];
+        if (excludeTerms.some(term => content.includes(term))) {
+          return false;
+        }
+        
+        // Must mention sport or be from sport section
+        return content.includes('sport') || 
+               content.includes('match') || 
+               content.includes('game') ||
+               content.includes('league') ||
+               content.includes('team');
+      })
+      .map(article => ({
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        image: article.urlToImage || 'https://via.placeholder.com/400x200?text=Sports+News',
+        publishedAt: new Date(article.publishedAt).toLocaleString(),
+        source: article.source.name
+      }));
+  } catch (error) {
+    console.log('BBC Sports fetch failed:', error.message);
+    return [];
+  }
+}
+
+// Fetch Guardian Sports
+async function fetchGuardianSports() {
+  try {
+    if (!process.env.NEWS_API_KEY) {
+      throw new Error('NEWS_API_KEY not found');
+    }
+
+    const response = await axios.get('https://newsapi.org/v2/everything', {
+      params: {
+        domains: 'theguardian.com',
+        q: 'football OR rugby OR cricket OR tennis OR sport',
         language: 'en',
         sortBy: 'publishedAt',
         pageSize: 30,
@@ -66,16 +143,22 @@ async function fetchBBCSports() {
       timeout: 10000
     });
 
-    return response.data.articles.map(article => ({
-      title: article.title,
-      description: article.description,
-      url: article.url,
-      image: article.urlToImage || 'https://via.placeholder.com/400x200?text=Sports+News',
-      publishedAt: new Date(article.publishedAt).toLocaleString(),
-      source: article.source.name
-    }));
+    return response.data.articles
+      .filter(article => {
+        const content = `${article.title || ''} ${article.description || ''}`.toLowerCase();
+        const excludeTerms = ['movie', 'film', 'tv show', 'actor'];
+        return !excludeTerms.some(term => content.includes(term));
+      })
+      .map(article => ({
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        image: article.urlToImage || 'https://via.placeholder.com/400x200?text=Sports+News',
+        publishedAt: new Date(article.publishedAt).toLocaleString(),
+        source: article.source.name
+      }));
   } catch (error) {
-    console.log('BBC Sports fetch failed:', error.message);
+    console.log('Guardian Sports fetch failed:', error.message);
     return [];
   }
 }
@@ -111,20 +194,24 @@ async function fetchSportsNews() {
     
     let articles = [];
 
-    // Try UK sports search
-    const ukSports = await fetchUKSportsNews();
-    articles = [...ukSports];
+    // Fetch from multiple sources
+    const [ukSports, bbcSports, guardianSports] = await Promise.all([
+      fetchUKSportsNews(),
+      fetchBBCSports(),
+      fetchGuardianSports()
+    ]);
 
-    // Also try BBC specifically
-    if (process.env.NEWS_API_KEY && articles.length < 20) {
-      const bbcSports = await fetchBBCSports();
-      articles = [...articles, ...bbcSports];
-    }
+    // Combine all sources
+    articles = [...ukSports, ...bbcSports, ...guardianSports];
+
+    console.log(`Total articles before deduplication: ${articles.length}`);
 
     // Remove duplicates based on title
     const uniqueArticles = articles.filter((article, index, self) =>
       index === self.findIndex((a) => a.title === article.title)
     );
+
+    console.log(`Unique articles after deduplication: ${uniqueArticles.length}`);
 
     // If NewsAPI fails completely, try ESPN as backup
     if (uniqueArticles.length === 0) {
@@ -151,13 +238,17 @@ async function fetchSportsNews() {
     }
 
     // Sort by published date (newest first)
-    articles.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    articles.sort((a, b) => {
+      const dateA = new Date(a.publishedAt);
+      const dateB = new Date(b.publishedAt);
+      return dateB - dateA;
+    });
 
     // Update cache
     newsCache = articles;
     lastFetchTime = Date.now();
     
-    console.log(`Fetched ${articles.length} UK sports articles`);
+    console.log(`✅ Final cached articles: ${articles.length}`);
     return articles;
   } catch (error) {
     console.error('Error fetching sports news:', error);
@@ -169,16 +260,16 @@ async function fetchSportsNews() {
 app.get('/', (req, res) => {
   res.json({
     message: 'UK Sports News API is running!',
-    note: 'Using /everything endpoint (works with free NewsAPI tier)',
+    note: 'Using /everything endpoint with strict UK sports filtering',
     endpoints: {
-      '/news': 'Get latest UK sports news',
+      '/news': 'Get latest UK sports news (filtered)',
       '/news/football': 'Get football/Premier League news',
       '/news/rugby': 'Get rugby news',
       '/news/cricket': 'Get cricket news',
       '/health': 'Health check'
     },
-    setup: 'Add NEWS_API_KEY environment variable for live UK sports news',
-    coverage: 'Covers UK sports including Premier League, Rugby, Cricket, and more'
+    sources: 'BBC Sport, The Guardian, Sky Sports, and more UK sources',
+    filtering: 'Movies and entertainment content automatically excluded'
   });
 });
 
@@ -187,7 +278,7 @@ app.get('/news', async (req, res) => {
     // Check cache first
     const now = Date.now();
     if (newsCache.length > 0 && (now - lastFetchTime) < CACHE_DURATION) {
-      console.log('Returning cached UK sports news');
+      console.log(`Returning ${newsCache.length} cached UK sports articles`);
       return res.json(newsCache);
     }
 
@@ -212,23 +303,28 @@ app.get('/news/football', async (req, res) => {
 
     const response = await axios.get('https://newsapi.org/v2/everything', {
       params: {
-        q: '("premier league" OR "champions league" OR "FA cup" OR football) AND (England OR UK OR Britain)',
+        q: '("premier league" OR "champions league" OR "FA cup" OR "EFL" OR football OR soccer) AND (England OR UK OR Britain) -movie -film',
         language: 'en',
         sortBy: 'publishedAt',
-        pageSize: 30,
+        pageSize: 50,
         apiKey: process.env.NEWS_API_KEY
       },
       timeout: 10000
     });
 
-    const articles = response.data.articles.map(article => ({
-      title: article.title,
-      description: article.description,
-      url: article.url,
-      image: article.urlToImage || 'https://via.placeholder.com/400x200?text=Football+News',
-      publishedAt: new Date(article.publishedAt).toLocaleString(),
-      source: article.source.name
-    }));
+    const articles = response.data.articles
+      .filter(article => {
+        const content = `${article.title || ''} ${article.description || ''}`.toLowerCase();
+        return !content.includes('movie') && !content.includes('film');
+      })
+      .map(article => ({
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        image: article.urlToImage || 'https://via.placeholder.com/400x200?text=Football+News',
+        publishedAt: new Date(article.publishedAt).toLocaleString(),
+        source: article.source.name
+      }));
 
     res.json(articles);
   } catch (error) {
@@ -244,10 +340,10 @@ app.get('/news/rugby', async (req, res) => {
 
     const response = await axios.get('https://newsapi.org/v2/everything', {
       params: {
-        q: 'rugby AND (UK OR England OR Scotland OR Wales OR "six nations" OR premiership)',
+        q: '(rugby OR "six nations" OR "premiership rugby" OR "rugby union" OR "rugby league") AND (UK OR England OR Scotland OR Wales)',
         language: 'en',
         sortBy: 'publishedAt',
-        pageSize: 30,
+        pageSize: 50,
         apiKey: process.env.NEWS_API_KEY
       },
       timeout: 10000
@@ -276,10 +372,10 @@ app.get('/news/cricket', async (req, res) => {
 
     const response = await axios.get('https://newsapi.org/v2/everything', {
       params: {
-        q: 'cricket AND (England OR UK OR "test match" OR ashes OR "T20")',
+        q: '(cricket OR "test match" OR "ashes" OR "T20" OR "england cricket") AND (England OR UK)',
         language: 'en',
         sortBy: 'publishedAt',
-        pageSize: 30,
+        pageSize: 50,
         apiKey: process.env.NEWS_API_KEY
       },
       timeout: 10000
@@ -304,11 +400,12 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
     region: 'UK',
-    method: '/everything endpoint (free tier compatible)',
+    method: '/everything endpoint with strict UK sports filtering',
     timestamp: new Date().toISOString(),
     cached_articles: newsCache.length,
     last_fetch: new Date(lastFetchTime).toISOString(),
-    has_api_key: !!process.env.NEWS_API_KEY
+    has_api_key: !!process.env.NEWS_API_KEY,
+    filtering: 'Movies and entertainment automatically excluded'
   });
 });
 
@@ -316,7 +413,7 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`UK Sports News API running on port ${PORT}`);
   console.log(`NewsAPI Key available: ${!!process.env.NEWS_API_KEY}`);
-  console.log('Using /everything endpoint (compatible with free tier)');
+  console.log('Using strict UK sports filtering - movies/entertainment excluded');
   
   // Initial fetch
   fetchSportsNews();
