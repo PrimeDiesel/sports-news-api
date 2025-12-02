@@ -46,24 +46,33 @@ async function fetchFromNewsAPI() {
   }
 }
 
-// Fetch news from ESPN API (backup)
-async function fetchFromESPN() {
+// Fetch news from NewsAPI.org (UK focused)
+async function fetchFromNewsAPI() {
   try {
-    const response = await axios.get('https://site.api.espn.com/apis/site/v2/sports/news', {
-      params: { limit: 20 },
+    if (!process.env.NEWS_API_KEY) {
+      throw new Error('NEWS_API_KEY not found');
+    }
+
+    const response = await axios.get('https://newsapi.org/v2/top-headlines', {
+      params: {
+        category: 'sports',
+        country: 'gb',  // Changed from 'us' to 'gb' for UK news
+        pageSize: 50,
+        apiKey: process.env.NEWS_API_KEY
+      },
       timeout: 10000
     });
 
     return response.data.articles.map(article => ({
-      title: article.headline,
-      description: article.description || article.headline,
-      url: article.links?.web?.href || `https://espn.com`,
-      image: article.images?.[0]?.url || 'https://via.placeholder.com/400x200?text=Sports+News',
-      publishedAt: new Date(article.published).toLocaleString(),
-      source: 'ESPN'
+      title: article.title,
+      description: article.description,
+      url: article.url,
+      image: article.urlToImage || 'https://via.placeholder.com/400x200?text=Sports+News',
+      publishedAt: new Date(article.publishedAt).toLocaleString(),
+      source: article.source.name
     }));
   } catch (error) {
-    console.log('ESPN API failed:', error.message);
+    console.log('NewsAPI failed:', error.message);
     return [];
   }
 }
