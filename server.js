@@ -24,9 +24,10 @@ app.get('/news', async (req, res) => {
     // Fetch from multiple sports sources
     const sources = [
       'bbc-sport',
-      'the-guardian-uk',
       'espn',
-      'four-four-two'
+      'four-four-two',
+      'fox-sports',
+      'talksport'
     ];
     
     const sourceQuery = sources.join(',');
