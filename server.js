@@ -8,6 +8,17 @@ const PORT = process.env.PORT || 3000;
 // Enable CORS
 app.use(cors());
 
+// CACHE SYSTEM - Store articles in memory
+let cachedArticles = null;
+let cacheTimestamp = 0;
+const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes (1 hour) in milliseconds
+
+function isCacheValid() {
+  if (!cachedArticles) return false;
+  const age = Date.now() - cacheTimestamp;
+  return age < CACHE_DURATION;
+}
+
 // Root route
 app.get('/', (req, res) => {
   res.send('UK Sports News API - Access /news for sports articles');
@@ -21,6 +32,13 @@ app.get('/health', (req, res) => {
 // UK Sports News route
 app.get('/news', async (req, res) => {
   try {
+    // Check cache first
+    if (isCacheValid()) {
+      console.log('📦 Returning cached UK sports (age:', Math.floor((Date.now() - cacheTimestamp) / 60000), 'minutes)');
+      return res.json(cachedArticles);
+    }
+    
+    console.log('🔄 Fetching fresh UK sports from API...');
     // Fetch from multiple sports sources
     const sources = [
       'bbc-sport',
@@ -59,6 +77,11 @@ app.get('/news', async (req, res) => {
         source: article.source.name,
         publishedAt: new Date(article.publishedAt).toLocaleString()
       }));
+    
+    // Cache the results
+    cachedArticles = articles;
+    cacheTimestamp = Date.now();
+    console.log(`✅ Cached ${articles.length} UK sports articles`);
     
     res.json(articles);
   } catch (error) {
