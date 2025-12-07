@@ -65,7 +65,8 @@ app.get('/news', async (req, res) => {
     console.error('Error fetching sports news:', error.message);
     res.status(500).json({ 
       error: 'Failed to fetch sports news',
-      message: error.message 
+      message: error.message,
+      articles: []
     });
   }
 });
